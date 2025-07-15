@@ -1,5 +1,8 @@
 from flask import Flask, render_template, request, jsonify
 import os
+import logging
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 import time
 import requests
 import yt_dlp
@@ -31,8 +34,10 @@ def cleanup_file(file_path):
 
 def download_audio(youtube_url, output_path):
     """Download audio from YouTube video"""
+    logging.info(f"Attempting to download audio from: {youtube_url}")
     # Ensure the directory for the output path exists
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    logging.info(f"Ensured directory exists: {output_path.parent}")
     ydl_opts = {
         'format': 'bestaudio/best',
         'outtmpl': str(output_path.with_suffix('.%(ext)s')),
@@ -56,13 +61,20 @@ def download_audio(youtube_url, output_path):
         'ignoreerrors': True,
     }
     
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info_dict = ydl.extract_info(youtube_url, download=True)
-        # yt-dlp might download with a different extension, then convert to mp3
-        # We need to find the actual path of the mp3 file after post-processing
-        actual_file_path = Path(ydl.prepare_filename(info_dict)).with_suffix('.mp3')
-        
-    return actual_file_path
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info_dict = ydl.extract_info(youtube_url, download=True)
+            # yt-dlp might download with a different extension, then convert to mp3
+            # We need to find the actual path of the mp3 file after post-processing
+            actual_file_path = Path(ydl.prepare_filename(info_dict)).with_suffix('.mp3')
+            logging.info(f"Audio downloaded to: {actual_file_path}")
+            if not actual_file_path.exists():
+                logging.error(f"Downloaded file does not exist at: {actual_file_path}")
+                return None
+            return actual_file_path
+    except Exception as e:
+        logging.error(f"Error during audio download: {e}")
+        return None
 
 def upload_to_assemblyai(file_path, api_key):
     """Upload audio file to AssemblyAI"""
@@ -644,28 +656,96 @@ def validate_mcq_structure(mcq_data):
 
 
 def process_transcription(youtube_url, job_id, language_code=None):
-     """Background task to process transcription"""
-     actual_downloaded_path = None
-     # Define a temporary directory within the application's writable space
-     temp_dir = Path('tmp')
-     temp_dir.mkdir(parents=True, exist_ok=True) # Ensure the directory exists
-     temp_audio_file_name = f"temp_audio_{job_id}.mp3"
+    """Background task to process transcription"""
+    logging.info(f"Starting transcription process for job_id: {job_id}, URL: {youtube_url}")
+    actual_downloaded_path = None
+    # Define a temporary directory within the application's writable space
+    tmp_dir = Path('./tmp')
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    logging.info(f"Ensured temporary directory exists: {tmp_dir}")
+    temp_audio_file = tmp_dir / f"temp_audio_{uuid.uuid4()}.mp3"
+    
+    try:
+        transcription_results[job_id] = {'status': 'downloading'}
+        logging.info(f"Attempting to download audio to: {temp_audio_file}")
+        actual_downloaded_path = download_audio(youtube_url, temp_audio_file)
+        
+        if actual_downloaded_path:
+            logging.info(f"Audio downloaded successfully to: {actual_downloaded_path}")
+            if not actual_downloaded_path.exists():
+                logging.error(f"Downloaded file {actual_downloaded_path} does not exist after download.")
+                transcription_results[job_id] = {
+                    'status': 'error',
+                    'error': 'Downloaded audio file not found.'
+                }
+                return
+            
+            transcription_results[job_id] = {'status': 'uploading'}
+            logging.info(f"Uploading {actual_downloaded_path} to AssemblyAI.")
+            upload_url = upload_to_assemblyai(actual_downloaded_path, ASSEMBLYAI_API_KEY)
+            logging.info(f"Audio uploaded to AssemblyAI: {upload_url}")
+            
+            transcription_results[job_id] = {'status': 'submitting'}
+            logging.info(f"Submitting transcription request for {upload_url}.")
+            transcript_id = submit_transcription(upload_url, ASSEMBLYAI_API_KEY, language_code)
+            logging.info(f"Transcription submitted with ID: {transcript_id}")
+            
+            transcription_results[job_id] = {'status': 'processing'}
+            logging.info(f"Polling transcription for ID: {transcript_id}.")
+            poll_transcription(transcript_id, ASSEMBLYAI_API_KEY, job_id)
+            logging.info(f"Transcription polling completed for job_id: {job_id}.")
+        else:
+            logging.error(f"Failed to download audio for URL: {youtube_url}")
+            transcription_results[job_id] = {
+                'status': 'error',
+                'error': 'Failed to download audio.'
+            }
+    except Exception as e:
+        logging.error(f"Error in process_transcription for job_id {job_id}: {e}", exc_info=True)
+        transcription_results[job_id] = {
+            'status': 'error',
+            'error': str(e)
+        }
+    finally:
+        if actual_downloaded_path and actual_downloaded_path.exists():
+            logging.info(f"Cleaning up temporary file: {actual_downloaded_path}")
+            cleanup_file(actual_downloaded_path)
+        else:
+            logging.info(f"No temporary file to clean up or file not found: {actual_downloaded_path}")"temp_audio_{job_id}.mp3"
      temp_audio_path_obj = temp_dir / temp_audio_file_name
     
      try:
          transcription_results[job_id] = {'status': 'downloading'}
+         logging.info(f"Attempting to download audio to: {temp_audio_path_obj}")
          actual_downloaded_path = download_audio(youtube_url, temp_audio_path_obj)
          
+         if not actual_downloaded_path or not actual_downloaded_path.exists():
+             logging.error(f"Failed to download audio for URL: {youtube_url} or file not found at {actual_downloaded_path}")
+             transcription_results[job_id] = {
+                 'status': 'error',
+                 'error': 'Failed to download audio or downloaded file not found.'
+             }
+             return # Exit early if download failed
+             
+         logging.info(f"Audio downloaded successfully to: {actual_downloaded_path}")
+         
          transcription_results[job_id] = {'status': 'uploading'}
+         logging.info(f"Uploading {actual_downloaded_path} to AssemblyAI.")
          audio_url = upload_to_assemblyai(actual_downloaded_path, ASSEMBLYAI_API_KEY)
+         logging.info(f"Audio uploaded to AssemblyAI: {audio_url}")
          
          transcription_results[job_id] = {'status': 'submitting'}
+         logging.info(f"Submitting transcription request for {audio_url}.")
          transcript_id = submit_transcription(audio_url, ASSEMBLYAI_API_KEY, language_code)
+         logging.info(f"Transcription submitted with ID: {transcript_id}")
          
          transcription_results[job_id] = {'status': 'processing'}
+         logging.info(f"Polling transcription for ID: {transcript_id}.")
          poll_transcription(transcript_id, ASSEMBLYAI_API_KEY, job_id)
+         logging.info(f"Transcription polling completed for job_id: {job_id}.")
          
      except Exception as e:
+         logging.error(f"Error in process_transcription for job_id {job_id}: {e}", exc_info=True)
          transcription_results[job_id] = {
              'status': 'error',
              'error': str(e)
@@ -673,7 +753,10 @@ def process_transcription(youtube_url, job_id, language_code=None):
      
      finally:
          if actual_downloaded_path and actual_downloaded_path.exists():
+             logging.info(f"Cleaning up temporary file: {actual_downloaded_path}")
              cleanup_file(actual_downloaded_path)
+         else:
+             logging.info(f"No temporary file to clean up or file not found: {actual_downloaded_path}")
 
 
 @app.route('/')

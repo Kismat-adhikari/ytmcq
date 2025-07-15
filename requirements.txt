@@ -1,4 +1,0 @@
-Flask==2.3.3
-python-dotenv
-requests==2.31.0
-yt-dlp==2021.3.24.1

@@ -8,6 +8,7 @@ import threading
 import uuid
 import json
 from dotenv import load_dotenv
+from flask import Flask, request, jsonify, render_template
 
 load_dotenv()
 
@@ -18,6 +19,7 @@ transcription_results = {}
 
 # Your API keys (loaded from .env)
 ASSEMBLYAI_API_KEY = os.environ.get("ASSEMBLYAI_API_KEY")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
 
 def cleanup_file(file_path):
@@ -29,9 +31,11 @@ def cleanup_file(file_path):
 
 def download_audio(youtube_url, output_path):
     """Download audio from YouTube video"""
+    # Ensure the directory for the output path exists
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     ydl_opts = {
         'format': 'bestaudio/best',
-        'outtmpl': output_path.replace('.mp3', '.%(ext)s'),
+        'outtmpl': str(output_path.with_suffix('.%(ext)s')),
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
@@ -53,9 +57,12 @@ def download_audio(youtube_url, output_path):
     }
     
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([youtube_url])
-    
-    return output_path
+        info_dict = ydl.extract_info(youtube_url, download=True)
+        # yt-dlp might download with a different extension, then convert to mp3
+        # We need to find the actual path of the mp3 file after post-processing
+        actual_file_path = Path(ydl.prepare_filename(info_dict)).with_suffix('.mp3')
+        
+    return actual_file_path
 
 def upload_to_assemblyai(file_path, api_key):
     """Upload audio file to AssemblyAI"""
@@ -637,15 +644,20 @@ def validate_mcq_structure(mcq_data):
 
 
 def process_transcription(youtube_url, job_id, language_code=None):
-    """Background task to process transcription"""
-    audio_file = f"temp_audio_{job_id}.mp3"
+     """Background task to process transcription"""
+     actual_downloaded_path = None
+     # Define a temporary directory within the application's writable space
+     temp_dir = Path('tmp')
+     temp_dir.mkdir(parents=True, exist_ok=True) # Ensure the directory exists
+     temp_audio_file_name = f"temp_audio_{job_id}.mp3"
+     temp_audio_path_obj = temp_dir / temp_audio_file_name
     
     try:
         transcription_results[job_id] = {'status': 'downloading'}
-        download_audio(youtube_url, audio_file)
+        actual_downloaded_path = download_audio(youtube_url, temp_audio_path_obj)
         
         transcription_results[job_id] = {'status': 'uploading'}
-        audio_url = upload_to_assemblyai(audio_file, ASSEMBLYAI_API_KEY)
+        audio_url = upload_to_assemblyai(actual_downloaded_path, ASSEMBLYAI_API_KEY)
         
         transcription_results[job_id] = {'status': 'submitting'}
         transcript_id = submit_transcription(audio_url, ASSEMBLYAI_API_KEY, language_code)
@@ -660,7 +672,8 @@ def process_transcription(youtube_url, job_id, language_code=None):
         }
     
     finally:
-        cleanup_file(audio_file)
+        if actual_downloaded_path and actual_downloaded_path.exists():
+            cleanup_file(actual_downloaded_path)
 
 
 @app.route('/')

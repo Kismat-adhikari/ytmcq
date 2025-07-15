@@ -694,6 +694,6 @@ def status(job_id):
     return jsonify(result)
 
 
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8080))  # 8080 fallback
+    app.run(host="0.0.0.0", port=port, debug=True)

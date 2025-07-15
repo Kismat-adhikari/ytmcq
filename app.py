@@ -652,28 +652,28 @@ def process_transcription(youtube_url, job_id, language_code=None):
      temp_audio_file_name = f"temp_audio_{job_id}.mp3"
      temp_audio_path_obj = temp_dir / temp_audio_file_name
     
-    try:
-        transcription_results[job_id] = {'status': 'downloading'}
-        actual_downloaded_path = download_audio(youtube_url, temp_audio_path_obj)
-        
-        transcription_results[job_id] = {'status': 'uploading'}
-        audio_url = upload_to_assemblyai(actual_downloaded_path, ASSEMBLYAI_API_KEY)
-        
-        transcription_results[job_id] = {'status': 'submitting'}
-        transcript_id = submit_transcription(audio_url, ASSEMBLYAI_API_KEY, language_code)
-        
-        transcription_results[job_id] = {'status': 'processing'}
-        poll_transcription(transcript_id, ASSEMBLYAI_API_KEY, job_id)
-        
-    except Exception as e:
-        transcription_results[job_id] = {
-            'status': 'error',
-            'error': str(e)
-        }
-    
-    finally:
-        if actual_downloaded_path and actual_downloaded_path.exists():
-            cleanup_file(actual_downloaded_path)
+     try:
+         transcription_results[job_id] = {'status': 'downloading'}
+         actual_downloaded_path = download_audio(youtube_url, temp_audio_path_obj)
+         
+         transcription_results[job_id] = {'status': 'uploading'}
+         audio_url = upload_to_assemblyai(actual_downloaded_path, ASSEMBLYAI_API_KEY)
+         
+         transcription_results[job_id] = {'status': 'submitting'}
+         transcript_id = submit_transcription(audio_url, ASSEMBLYAI_API_KEY, language_code)
+         
+         transcription_results[job_id] = {'status': 'processing'}
+         poll_transcription(transcript_id, ASSEMBLYAI_API_KEY, job_id)
+         
+     except Exception as e:
+         transcription_results[job_id] = {
+             'status': 'error',
+             'error': str(e)
+         }
+     
+     finally:
+         if actual_downloaded_path and actual_downloaded_path.exists():
+             cleanup_file(actual_downloaded_path)
 
 
 @app.route('/')

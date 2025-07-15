@@ -7,6 +7,7 @@ from pathlib import Path
 import threading
 import uuid
 import json
+import tempfile
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -20,12 +21,13 @@ transcription_results = {}
 ASSEMBLYAI_API_KEY = os.environ.get("ASSEMBLYAI_API_KEY")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
-def cleanup_file(file_path):
-    """Remove temporary audio file"""
-    try:
-        Path(file_path).unlink()
-    except FileNotFoundError:
-        pass
+# The tempfile module handles cleanup automatically, so this function is no longer needed.
+# def cleanup_file(file_path):
+#     """Remove temporary audio file"""
+#     try:
+#         Path(file_path).unlink()
+#     except FileNotFoundError:
+#         pass
 
 def download_audio(youtube_url, output_path):
     """Download audio from YouTube video"""
@@ -638,14 +640,16 @@ def validate_mcq_structure(mcq_data):
 
 def process_transcription(youtube_url, job_id, language_code=None):
     """Background task to process transcription"""
-    audio_file = f"temp_audio_{job_id}.mp3"
+    # Create a temporary file that will be automatically deleted when closed
+    # or when the program exits.
+    temp_audio_file = tempfile.NamedTemporaryFile(suffix=".mp3", delete=True)
     
     try:
         transcription_results[job_id] = {'status': 'downloading'}
-        download_audio(youtube_url, audio_file)
+        download_audio(youtube_url, temp_audio_file.name)
         
         transcription_results[job_id] = {'status': 'uploading'}
-        audio_url = upload_to_assemblyai(audio_file, ASSEMBLYAI_API_KEY)
+        audio_url = upload_to_assemblyai(temp_audio_file.name, ASSEMBLYAI_API_KEY)
         
         transcription_results[job_id] = {'status': 'submitting'}
         transcript_id = submit_transcription(audio_url, ASSEMBLYAI_API_KEY, language_code)
@@ -658,9 +662,9 @@ def process_transcription(youtube_url, job_id, language_code=None):
             'status': 'error',
             'error': str(e)
         }
-    
     finally:
-        cleanup_file(audio_file)
+        # Ensure the temporary file is closed and deleted
+        temp_audio_file.close()
 
 
 @app.route('/')

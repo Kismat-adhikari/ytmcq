@@ -711,45 +711,7 @@ def process_transcription(youtube_url, job_id, language_code=None):
             logging.info(f"Cleaning up temporary file: {actual_downloaded_path}")
             cleanup_file(actual_downloaded_path)
         else:
-            logging.info(f"No temporary file to clean up or file not found: {actual_downloaded_path}")"temp_audio_{job_id}.mp3"
-     temp_audio_path_obj = temp_dir / temp_audio_file_name
-    
-     try:
-         transcription_results[job_id] = {'status': 'downloading'}
-         logging.info(f"Attempting to download audio to: {temp_audio_path_obj}")
-         actual_downloaded_path = download_audio(youtube_url, temp_audio_path_obj)
-         
-         if not actual_downloaded_path or not actual_downloaded_path.exists():
-             logging.error(f"Failed to download audio for URL: {youtube_url} or file not found at {actual_downloaded_path}")
-             transcription_results[job_id] = {
-                 'status': 'error',
-                 'error': 'Failed to download audio or downloaded file not found.'
-             }
-             return # Exit early if download failed
-             
-         logging.info(f"Audio downloaded successfully to: {actual_downloaded_path}")
-         
-         transcription_results[job_id] = {'status': 'uploading'}
-         logging.info(f"Uploading {actual_downloaded_path} to AssemblyAI.")
-         audio_url = upload_to_assemblyai(actual_downloaded_path, ASSEMBLYAI_API_KEY)
-         logging.info(f"Audio uploaded to AssemblyAI: {audio_url}")
-         
-         transcription_results[job_id] = {'status': 'submitting'}
-         logging.info(f"Submitting transcription request for {audio_url}.")
-         transcript_id = submit_transcription(audio_url, ASSEMBLYAI_API_KEY, language_code)
-         logging.info(f"Transcription submitted with ID: {transcript_id}")
-         
-         transcription_results[job_id] = {'status': 'processing'}
-         logging.info(f"Polling transcription for ID: {transcript_id}.")
-         poll_transcription(transcript_id, ASSEMBLYAI_API_KEY, job_id)
-         logging.info(f"Transcription polling completed for job_id: {job_id}.")
-         
-     except Exception as e:
-         logging.error(f"Error in process_transcription for job_id {job_id}: {e}", exc_info=True)
-         transcription_results[job_id] = {
-             'status': 'error',
-             'error': str(e)
-         }
+            logging.info(f"No temporary file to clean up or file not found: {actual_downloaded_path}")
      
      finally:
          if actual_downloaded_path and actual_downloaded_path.exists():

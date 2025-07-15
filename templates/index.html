@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEB MCQ Quiz Generator</title>
+   <link rel="stylesheet" href="/static/css/styles.css">
+    <style>
+        /* Additional styles for flashcards */
+        .flashcard-container {
+            max-width: 600px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+
+        .flashcard {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 15px;
+            padding: 30px;
+            margin: 20px 0;
+            min-height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            color: white;
+            font-size: 18px;
+            font-weight: 500;
+            line-height: 1.6;
+            cursor: pointer;
+            transition: transform 0.6s;
+            transform-style: preserve-3d;
+            position: relative;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .flashcard.flipped {
+            transform: rotateY(180deg);
+        }
+
+        .flashcard-front, .flashcard-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .flashcard-back {
+            transform: rotateY(180deg);
+            background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+        }
+
+        .flashcard-controls {
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .flashcard-btn {
+            background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            margin: 0 10px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .flashcard-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(52, 152, 219, 0.4);
+        }
+
+        .flashcard-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .flashcard-info {
+            text-align: center;
+            margin: 20px 0;
+            color: #666;
+            font-size: 16px;
+        }
+
+        .flashcard-stats {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin: 20px 0;
+        }
+
+        .flashcard-stat {
+            text-align: center;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            min-width: 120px;
+        }
+
+        .flashcard-stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #3498db;
+        }
+
+        .flashcard-stat-label {
+            font-size: 14px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .flashcard-metadata {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            background: rgba(255,255,255,0.2);
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .flip-hint {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 14px;
+            opacity: 0.8;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.8; }
+            50% { opacity: 0.4; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎓 NEB MCQ Quiz Generator</h1>
+            <p>Generate NEB-style MCQs from YouTube videos</p>
+        </div>
+
+        <div class="input-section">
+
+        <div class="input-group">
+            <input type="url" id="youtubeUrl" placeholder="Enter YouTube URL" required>
+            <select id="language">
+                <option value="">Auto-detect Language</option>
+                <option value="en">English</option>
+                <option value="hi">Hindi</option>
+                <option value="ne">Nepali</option>
+            </select>
+        </div>
+        <button class="submit-btn" id="submitBtn">Generate Quiz</button>
+    </div>
+
+    <!-- Embedded YouTube Video Section -->
+    <div id="videoEmbedSection" style="display:none; text-align:center; margin: 30px 0 10px 0;"></div>
+
+        <!-- Tabs Section -->
+        <div class="tabs-section" style="padding: 0 40px; margin-top: 20px;">
+            <div class="tabs" style="display: flex; gap: 20px; border-bottom: 2px solid #e9ecef;">
+                <button class="tab-btn active" id="mcqTab" style="background: none; border: none; font-size: 18px; font-weight: 600; color: #3498db; padding: 10px 0; cursor: pointer; border-bottom: 3px solid #3498db;">MCQ</button>
+                <button class="tab-btn" id="flashcardTab" style="background: none; border: none; font-size: 18px; font-weight: 600; color: #666; padding: 10px 0; cursor: pointer; border-bottom: 3px solid transparent;">Flashcards</button>
+            </div>
+            <div class="tab-content" id="mcqTabContent" style="padding: 20px 0;">
+                <div style="font-size: 16px; color: #2c3e50;">This is the MCQ tab. Quiz content will appear below.</div>
+            </div>
+            <div class="tab-content" id="flashcardTabContent" style="padding: 20px 0; display: none;">
+                <div style="font-size: 16px; color: #2c3e50;">This is the flashcards tab. The flashcards will appear here.</div>
+            </div>
+        </div>
+
+        <div class="status-section" id="statusSection" style="display: none;">
+            <div class="status-message" id="statusMessage">Processing...</div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-text" id="progressText">Initializing...</div>
+        </div>
+
+        <div class="quiz-stats" id="quizStats" style="display: none;">
+            <div class="stats-grid">
+                <div class="stat-card total-questions">
+                    <div class="stat-number" id="totalQuestions">0</div>
+                    <div class="stat-label">Total Questions</div>
+                </div>
+                <div class="stat-card correct-answers">
+                    <div class="stat-number" id="correctAnswers">0</div>
+                    <div class="stat-label">Correct Answers</div>
+                </div>
+                <div class="stat-card wrong-answers">
+                    <div class="stat-number" id="wrongAnswers">0</div>
+                    <div class="stat-label">Wrong Answers</div>
+                </div>
+                <div class="stat-card accuracy">
+                    <div class="stat-number" id="accuracy">0%</div>
+                    <div class="stat-label">Accuracy</div>
+                </div>
+            </div>
+            <div class="quiz-progress">
+                <div class="progress-header">
+                    <div class="progress-title">Quiz Progress</div>
+                    <div class="progress-percentage" id="progressPercentage">0%</div>
+                </div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar-fill" id="progressBarFill"></div>
+                </div>
+                <div class="progress-indicators">
+                    <span id="currentQuestion">Question 0 of 0</span>
+                    <span id="remainingQuestions">0 remaining</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="quiz-section" id="quizSection">
+            <div id="questionContainer"></div>
+        </div>
+
+        <div class="results-section" id="resultsSection">
+            <div class="results-header">🎉 Quiz Complete!</div>
+            <div class="final-stats" id="finalStats"></div>
+            <button class="restart-btn" id="restartBtn">Start New Quiz</button>
+        </div>
+    </div>
+
+    <script>
+        // Tab switching logic
+        const mcqTabBtn = document.getElementById('mcqTab');
+        const flashcardTabBtn = document.getElementById('flashcardTab');
+        const mcqTabContent = document.getElementById('mcqTabContent');
+        const flashcardTabContent = document.getElementById('flashcardTabContent');
+
+        mcqTabBtn.addEventListener('click', () => {
+            mcqTabBtn.classList.add('active');
+            mcqTabBtn.style.color = '#3498db';
+            mcqTabBtn.style.borderBottom = '3px solid #3498db';
+            flashcardTabBtn.classList.remove('active');
+            flashcardTabBtn.style.color = '#666';
+            flashcardTabBtn.style.borderBottom = '3px solid transparent';
+            mcqTabContent.style.display = '';
+            flashcardTabContent.style.display = 'none';
+            // Show quiz stats and quiz section
+            quizStatsSection.style.display = 'block';
+            quizSection.style.display = 'block';
+        });
+
+        flashcardTabBtn.addEventListener('click', () => {
+            flashcardTabBtn.classList.add('active');
+            flashcardTabBtn.style.color = '#3498db';
+            flashcardTabBtn.style.borderBottom = '3px solid #3498db';
+            mcqTabBtn.classList.remove('active');
+            mcqTabBtn.style.color = '#666';
+            mcqTabBtn.style.borderBottom = '3px solid transparent';
+            mcqTabContent.style.display = 'none';
+            flashcardTabContent.style.display = '';
+            // Hide quiz stats and quiz section
+            quizStatsSection.style.display = 'none';
+            quizSection.style.display = 'none';
+            renderFlashcards();
+        });
+
+        // Render flashcards in the flashcard tab
+        function renderFlashcards() {
+            const container = document.getElementById('flashcardTabContent');
+            if (!quizData || !quizData.flashcards || quizData.flashcards.length === 0) {
+                container.innerHTML = '<div style="font-size: 16px; color: #c0392b;">No flashcards were generated. Please try with a different video.</div>';
+                return;
+            }
+            let currentFlashcard = 0;
+            function showFlashcard(index) {
+                const card = quizData.flashcards[index];
+                container.innerHTML = `
+                    <div class="flashcard-container">
+                        <div class="flashcard" id="flashcard">
+                            <div class="flashcard-front" style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                                <div class="flashcard-metadata" style="margin-bottom:10px;background:rgba(255,255,255,0.2);padding:5px 10px;border-radius:15px;font-size:12px;font-weight:600;">
+                                    ${card.subject ? card.subject : ''}${card.subject && card.category ? ' | ' : ''}${card.category ? card.category : ''}
+                                </div>
+                                <div>${card.front}</div>
+                            </div>
+                            <div class="flashcard-back" style="display: none; flex-direction: column; align-items: center; justify-content: center;">
+                                <div class="flashcard-metadata" style="margin-bottom:10px;background:rgba(255,255,255,0.2);padding:5px 10px;border-radius:15px;font-size:12px;font-weight:600;">
+                                    ${card.subject ? card.subject : ''}${card.subject && card.category ? ' | ' : ''}${card.category ? card.category : ''}
+                                </div>
+                                <div>${card.back}</div>
+                            </div>
+                            <div class="flip-hint">Click to flip</div>
+                        </div>
+                        <div class="flashcard-controls">
+                            <button class="flashcard-btn" id="prevFlashcard" ${index === 0 ? 'disabled' : ''}>Previous</button>
+                            <span style="font-size:16px; font-weight:600;">${index + 1} / ${quizData.flashcards.length}</span>
+                            <button class="flashcard-btn" id="nextFlashcard" ${index === quizData.flashcards.length - 1 ? 'disabled' : ''}>Next</button>
+                        </div>
+                    </div>
+                `;
+                // Flip logic
+                const flashcardElem = document.getElementById('flashcard');
+                let flipped = false;
+                flashcardElem.onclick = function() {
+                    flipped = !flipped;
+                    flashcardElem.classList.toggle('flipped', flipped);
+                    flashcardElem.querySelector('.flashcard-front').style.display = flipped ? 'none' : 'flex';
+                    flashcardElem.querySelector('.flashcard-back').style.display = flipped ? 'flex' : 'none';
+                };
+                document.getElementById('prevFlashcard').onclick = function() {
+                    if (currentFlashcard > 0) {
+                        currentFlashcard--;
+                        showFlashcard(currentFlashcard);
+                    }
+                };
+                document.getElementById('nextFlashcard').onclick = function() {
+                    if (currentFlashcard < quizData.flashcards.length - 1) {
+                        currentFlashcard++;
+                        showFlashcard(currentFlashcard);
+                    }
+                };
+            }
+            showFlashcard(currentFlashcard);
+        }
+        let currentJobId = null;
+        let quizData = null;
+        let currentQuestionIndex = 0;
+        let userAnswers = [];
+        let quizStats = {
+            total: 0,
+            correct: 0,
+            wrong: 0,
+            answered: 0
+        };
+
+        const statusSection = document.getElementById('statusSection');
+        const statusMessage = document.getElementById('statusMessage');
+        const progressFill = document.getElementById('progressFill');
+        const progressText = document.getElementById('progressText');
+        const quizStatsSection = document.getElementById('quizStats');
+        const quizSection = document.getElementById('quizSection');
+        const resultsSection = document.getElementById('resultsSection');
+        const submitBtn = document.getElementById('submitBtn');
+
+        // Status messages mapping
+        const statusMessages = {
+            'downloading': 'Downloading audio from YouTube...',
+            'uploading': 'Uploading audio for processing...',
+            'submitting': 'Submitting transcription request...',
+            'processing': 'Transcribing audio content...',
+            'generating_mcqs': 'Generating NEB-style MCQs...',
+            'completed': 'Quiz ready! Loading questions...',
+            'error': 'An error occurred. Please try again.'
+        };
+
+        // Submit quiz generation
+        document.getElementById('submitBtn').addEventListener('click', async () => {
+            const url = document.getElementById('youtubeUrl').value;
+            const language = document.getElementById('language').value;
+
+            if (!url) {
+                alert('Please enter a YouTube URL');
+                return;
+            }
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Processing...';
+            statusSection.style.display = 'block';
+            
+            try {
+                const response = await fetch('/transcribe', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ url, language })
+                });
+
+                const data = await response.json();
+                currentJobId = data.job_id;
+                
+                pollStatus();
+            } catch (error) {
+                console.error('Error:', error);
+                statusMessage.textContent = 'Failed to start processing. Please try again.';
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Generate Quiz';
+            }
+        });
+
+        // Poll for status updates
+        async function pollStatus() {
+            try {
+                const response = await fetch(`/status/${currentJobId}`);
+                const data = await response.json();
+
+                const status = data.status;
+                statusMessage.textContent = statusMessages[status] || 'Processing...';
+                
+                // Update progress bar based on status
+                const progressMap = {
+                    'downloading': 20,
+                    'uploading': 40,
+                    'submitting': 50,
+                    'processing': 70,
+                    'generating_mcqs': 90,
+                    'generating_content': 90,
+                    'completed': 100
+                };
+
+                const progress = progressMap[status] !== undefined ? progressMap[status] : 0;
+                progressFill.style.width = progress + '%';
+                progressText.textContent = `${progress}% complete`;
+
+                if (status === 'completed') {
+                    quizData = data;
+                    initializeQuiz();
+                } else if (status === 'error') {
+                    statusMessage.textContent = data.error || 'An error occurred';
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Generate Quiz';
+                } else {
+                    setTimeout(pollStatus, 2000);
+                }
+            } catch (error) {
+                console.error('Polling error:', error);
+                setTimeout(pollStatus, 2000);
+            }
+        }
+
+        // Initialize quiz
+        function initializeQuiz() {
+            if (!quizData || !quizData.mcqs || quizData.mcqs.length === 0) {
+                statusMessage.textContent = 'No questions were generated. Please try with a different video.';
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Generate Quiz';
+                return;
+            }
+
+            // Embed YouTube video above tabs
+            const url = document.getElementById('youtubeUrl').value;
+            const videoId = extractYouTubeId(url);
+            const videoEmbedSection = document.getElementById('videoEmbedSection');
+            if (videoId) {
+                videoEmbedSection.innerHTML = `<iframe width="560" height="315" src="https://www.youtube.com/embed/${videoId}" frameborder="0" allowfullscreen style="border-radius:12px;"></iframe>`;
+                videoEmbedSection.style.display = 'block';
+            } else {
+                videoEmbedSection.innerHTML = '';
+                videoEmbedSection.style.display = 'none';
+            }
+
+            // Initialize stats
+            quizStats.total = quizData.mcqs.length;
+            quizStats.correct = 0;
+            quizStats.wrong = 0;
+            quizStats.answered = 0;
+            currentQuestionIndex = 0;
+            userAnswers = new Array(quizStats.total).fill(null);
+
+            // Hide status section and show quiz
+            statusSection.style.display = 'none';
+            quizStatsSection.style.display = 'block';
+            quizSection.style.display = 'block';
+
+            // Remove MCQ tab placeholder
+            const mcqTabContent = document.getElementById('mcqTabContent');
+            if (mcqTabContent) {
+                mcqTabContent.innerHTML = '';
+            }
+
+            // Set flag for MCQ appeared
+            window.mcqAppeared = true;
+
+            updateStats();
+            displayQuestion();
+
+            // Prepare flashcards tab if flashcards exist
+            if (quizData.flashcards && quizData.flashcards.length > 0) {
+                // Optionally, render flashcards immediately or wait for tab click
+                // renderFlashcards();
+            }
+        }
+
+        // Helper to extract YouTube video ID from URL
+        function extractYouTubeId(url) {
+            if (!url) return null;
+            // Standard YouTube URL
+            const regExp = /^.*(?:youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|watch\?.+&v=)([^#&?\n\r]{11}).*/;
+            const match = url.match(regExp);
+            return (match && match[1]) ? match[1] : null;
+        }
+
+        // Update statistics display
+        function updateStats() {
+            document.getElementById('totalQuestions').textContent = quizStats.total;
+            document.getElementById('correctAnswers').textContent = quizStats.correct;
+            document.getElementById('wrongAnswers').textContent = quizStats.wrong;
+            
+            const accuracy = quizStats.answered > 0 ? Math.round((quizStats.correct / quizStats.answered) * 100) : 0;
+            document.getElementById('accuracy').textContent = accuracy + '%';
+
+            // Update progress
+            const progress = Math.round((quizStats.answered / quizStats.total) * 100);
+            document.getElementById('progressPercentage').textContent = progress + '%';
+            document.getElementById('progressBarFill').style.width = progress + '%';
+            
+            document.getElementById('currentQuestion').textContent = `Question ${currentQuestionIndex + 1} of ${quizStats.total}`;
+            document.getElementById('remainingQuestions').textContent = `${quizStats.total - quizStats.answered} remaining`;
+        }
+
+        // Display current question
+        function displayQuestion() {
+            const question = quizData.mcqs[currentQuestionIndex];
+            const container = document.getElementById('questionContainer');
+            
+            container.innerHTML = `
+                <div class="question-container">
+                    <div class="question-header">
+                        <div class="question-number">Question ${currentQuestionIndex + 1}</div>
+                        <div class="question-subject">${question.subject || 'General'}</div>
+                    </div>
+                    <div class="question-text">${question.question}</div>
+                    <div class="options-container" id="optionsContainer">
+                        ${question.options.map((option, index) => `
+                            <div class="option" data-option="${String.fromCharCode(65 + index)}" onclick="selectOption('${String.fromCharCode(65 + index)}')">
+                                ${option}
+                                <span class="option-icon"></span>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <div class="question-actions">
+                        <button class="prev-btn" id="prevBtn" style="background: linear-gradient(135deg, #2980b9 0%, #3498db 100%); color: white; padding: 12px 25px; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; margin-right: 10px; ${currentQuestionIndex === 0 ? 'display:none;' : ''}">Previous</button>
+                        <button class="check-btn" id="checkBtn" onclick="checkAnswer()" disabled>Check Answer</button>
+                        <button class="next-btn" id="nextBtn" onclick="nextQuestion()">
+                            ${currentQuestionIndex === quizStats.total - 1 ? 'Finish Quiz' : 'Next Question'}
+                        </button>
+                    </div>
+                    <div class="explanation" id="explanation">
+                        <h4>Explanation:</h4>
+                        <p>${question.explanation || 'No explanation available.'}</p>
+                    </div>
+                </div>
+            `;
+
+            // Add event listener for previous button
+            const prevBtn = document.getElementById('prevBtn');
+            if (prevBtn) {
+                prevBtn.addEventListener('click', () => {
+                    if (currentQuestionIndex > 0) {
+                        currentQuestionIndex--;
+                        displayQuestion();
+                    }
+                });
+            }
+
+            // Restore previous answer state if answered
+            const userAnswer = userAnswers[currentQuestionIndex];
+            if (userAnswer !== null) {
+                // Highlight selected option
+                const selectedOpt = document.querySelector(`[data-option="${userAnswer}"]`);
+                if (selectedOpt) {
+                    selectedOpt.classList.add('selected');
+                }
+                // Lock all options
+                document.querySelectorAll('.option').forEach(opt => {
+                    opt.classList.add('locked');
+                    opt.onclick = null;
+                    const optionLetter = opt.getAttribute('data-option');
+                    const icon = opt.querySelector('.option-icon');
+                    if (optionLetter === question.correct_answer) {
+                        opt.classList.add('correct');
+                        icon.textContent = '✓';
+                    } else if (optionLetter === userAnswer) {
+                        opt.classList.add('incorrect');
+                        icon.textContent = '✗';
+                    }
+                });
+                // Show explanation and next button
+                document.getElementById('explanation').classList.add('show');
+                document.getElementById('nextBtn').classList.add('show');
+                document.getElementById('checkBtn').style.display = 'none';
+            }
+        }
+
+        // Select option
+        function selectOption(option) {
+            const checkBtn = document.getElementById('checkBtn');
+            
+            // If already answered, don't allow changes
+            if (userAnswers[currentQuestionIndex] !== null) {
+                return;
+            }
+
+            // Remove previous selection
+            document.querySelectorAll('.option').forEach(opt => {
+                opt.classList.remove('selected');
+            });
+
+            // Add selection to clicked option
+            document.querySelector(`[data-option="${option}"]`).classList.add('selected');
+            
+            // Enable check button
+            checkBtn.disabled = false;
+            checkBtn.setAttribute('data-selected', option);
+        }
+
+        // Check answer
+        function checkAnswer() {
+            const selectedOption = document.getElementById('checkBtn').getAttribute('data-selected');
+            const correctAnswer = quizData.mcqs[currentQuestionIndex].correct_answer;
+            
+            if (!selectedOption) return;
+
+            // Store user answer
+            userAnswers[currentQuestionIndex] = selectedOption;
+            quizStats.answered++;
+
+            // Update statistics
+            if (selectedOption === correctAnswer) {
+                quizStats.correct++;
+            } else {
+                quizStats.wrong++;
+            }
+
+            // Lock all options and show results
+            document.querySelectorAll('.option').forEach(opt => {
+                opt.classList.add('locked');
+                opt.onclick = null;
+                
+                const optionLetter = opt.getAttribute('data-option');
+                const icon = opt.querySelector('.option-icon');
+                
+                if (optionLetter === correctAnswer) {
+                    opt.classList.add('correct');
+                    icon.textContent = '✓';
+                } else if (optionLetter === selectedOption) {
+                    opt.classList.add('incorrect');
+                    icon.textContent = '✗';
+                }
+            });
+
+            // Show explanation and next button
+            document.getElementById('explanation').classList.add('show');
+            document.getElementById('nextBtn').classList.add('show');
+            document.getElementById('checkBtn').style.display = 'none';
+
+            updateStats();
+        }
+
+        // Next question
+        function nextQuestion() {
+            if (currentQuestionIndex < quizStats.total - 1) {
+                currentQuestionIndex++;
+                displayQuestion();
+            } else {
+                showResults();
+            }
+        }
+
+        // Show final results
+        function showResults() {
+            quizStatsSection.style.display = 'none';
+            quizSection.style.display = 'none';
+            resultsSection.style.display = 'block';
+            resultsSection.classList.add('active');
+
+            const accuracy = Math.round((quizStats.correct / quizStats.total) * 100);
+            
+            document.getElementById('finalStats').innerHTML = `
+                <div class="stat-card total-questions">
+                    <div class="stat-number">${quizStats.total}</div>
+                    <div class="stat-label">Total Questions</div>
+                </div>
+                <div class="stat-card correct-answers">
+                    <div class="stat-number">${quizStats.correct}</div>
+                    <div class="stat-label">Correct Answers</div>
+                </div>
+                <div class="stat-card wrong-answers">
+                    <div class="stat-number">${quizStats.wrong}</div>
+                    <div class="stat-label">Wrong Answers</div>
+                </div>
+                <div class="stat-card accuracy">
+                    <div class="stat-number">${accuracy}%</div>
+                    <div class="stat-label">Final Accuracy</div>
+                </div>
+            `;
+        }
+
+        // Restart quiz
+        document.getElementById('restartBtn').addEventListener('click', () => {
+            location.reload();
+        });
+
+        // Custom reload warning if MCQ has appeared or processing is ongoing
+        let reloadWarned = false;
+        window.addEventListener('beforeunload', function (e) {
+            const isProcessing = statusSection && statusSection.style.display === 'block';
+            if ((window.mcqAppeared || isProcessing) && !reloadWarned) {
+                reloadWarned = true;
+                if (!confirm('Are you sure? If you reload, it will reset your progress and you will have to restart.')) {
+                    e.preventDefault();
+                    reloadWarned = false;
+                    return false;
+                }
+            }
+        });
+    </script>
+</body>
+</html>
